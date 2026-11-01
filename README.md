@@ -11,6 +11,8 @@ The physical railway safety prototype integrates ESP32-based sensing modules wit
 ### Web Dashboard
 
 The web dashboard displays sensor telemetry, device connection status, obstacle distance, MPU readings and alert levels.
+<img width="850" height="427" alt="WhatsApp Image 2026-11-01 at 12 12 54 PM" src="https://github.com/user-attachments/assets/5c0289bc-72d8-41a5-bc5e-6964c5ad9f51" />
+
 <img width="1508" height="782" alt="Screenshot 2026-11-01 120044" src="https://github.com/user-attachments/assets/ced304c3-e2fc-444c-a412-6303539a9556" />
 
 ### Camera Preview and AI Detection Interface
