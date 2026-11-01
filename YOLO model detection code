@@ -1,0 +1,124 @@
+
+import cv2
+import time
+import requests
+from ultralytics import YOLO
+
+# -------- CONFIGURATION --------
+# Replace these with the IP addresses shown in Serial Monitor.
+CAMERA_STREAM = "http://CAMERA_IP:81/stream"
+ESP32_AI_URL = "http://DEVKIT_IP/ai"
+
+MODEL_NAME = "yolov8n.pt"
+CONFIDENCE_THRESHOLD = 0.55
+SEND_INTERVAL = 0.5
+
+# COCO classes that are useful for this demonstration.
+RELEVANT_CLASSES = {
+    "person", "bicycle", "car", "motorcycle",
+    "bus", "train", "truck"
+}
+
+# -------- LOAD MODEL --------
+print("Loading YOLO model...")
+model = YOLO(MODEL_NAME)
+print("YOLO model loaded.")
+
+# -------- CONNECT CAMERA --------
+print("Connecting to ESP32-CAM...")
+cap = cv2.VideoCapture(CAMERA_STREAM)
+
+if not cap.isOpened():
+    raise RuntimeError(
+        "Could not open camera stream. Check camera IP and /stream URL."
+    )
+
+print("Camera connected. Starting detection.")
+
+last_send = 0
+
+try:
+    while True:
+        success, frame = cap.read()
+
+        if not success:
+            print("Camera frame unavailable. Reconnecting...")
+            cap.release()
+            time.sleep(2)
+            cap = cv2.VideoCapture(CAMERA_STREAM)
+            continue
+
+        # Run YOLO detection.
+        results = model.predict(
+            source=frame,
+            conf=CONFIDENCE_THRESHOLD,
+            imgsz=640,
+            verbose=False
+        )
+
+        detected_objects = []
+
+        for result in results:
+            for box in result.boxes:
+                class_id = int(box.cls[0])
+                class_name = model.names[class_id]
+                confidence = float(box.conf[0])
+
+                if class_name not in RELEVANT_CLASSES:
+                    continue
+
+                detected_objects.append({
+                    "object_class": class_name,
+                    "confidence": confidence
+                })
+
+        # Select the highest-confidence relevant detection.
+        if detected_objects:
+            best = max(
+                detected_objects,
+                key=lambda item: item["confidence"]
+            )
+
+            payload = {
+                "detected": True,
+                "object_class": best["object_class"],
+                "confidence": round(best["confidence"], 3),
+                "count": len(detected_objects)
+            }
+        else:
+            payload = {
+                "detected": False,
+                "object_class": "none",
+                "confidence": 0.0,
+                "count": 0
+            }
+
+        # Send results periodically to the ESP32 DevKit.
+        now = time.time()
+
+        if now - last_send >= SEND_INTERVAL:
+            try:
+                response = requests.post(
+                    ESP32_AI_URL,
+                    json=payload,
+                    timeout=2
+                )
+                print(
+                    "AI:", payload,
+                    "| ESP32:", response.status_code
+                )
+            except requests.RequestException as error:
+                print("ESP32 communication error:", error)
+
+            last_send = now
+
+        # Display annotated detection window.
+        annotated = results[0].plot()
+        cv2.imshow("Railway Safety - YOLO Detection", annotated)
+
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+finally:
+    cap.release()
+    cv2.destroyAllWindows()
